@@ -1,123 +1,244 @@
-using HoverCar.Environment;
 using UnityEngine;
 
-namespace HoverCar.Vehicles
+namespace Vehicles
 {
-    public interface IHoverInputSource
-    {
-        float Throttle { get; }
-        float Steering { get; }
-        Quaternion DesiredOrientation { get; }
-    }
-
-    /// <summary>
-    /// Simple hover vehicle controller that applies forces based on input commands.
-    /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class HoverController : MonoBehaviour
     {
-        [SerializeField]
-        [Tooltip("Component that provides throttle and steering values.")]
-        private MonoBehaviour _inputProvider;
-
-        [SerializeField]
-        private float _thrustAcceleration = 40f;
-
-        [SerializeField]
-        private float _maxSpeed = 60f;
-
-        [SerializeField]
-        private float _steeringTorque = 8f;
-
-        [SerializeField]
-        private float _bankTorque = 4f;
-
-        [SerializeField]
-        private float _orientationResponsiveness = 5f;
-
-        private IHoverInputSource _input;
-        private Rigidbody _body;
-        private GravityRegistry _gravityRegistry;
-
-        /// <summary>
-        /// Current forward speed of the craft.
-        /// </summary>
-        public float CurrentSpeed => Vector3.Dot(_body.velocity, transform.forward);
-
-        public void SetInputSource(IHoverInputSource source)
+        [System.Serializable]
+        public class PIDController
         {
-            _input = source;
-            _inputProvider = source as MonoBehaviour;
+            [Tooltip("Proportional gain applied to the error vector.")]
+            public float kp = 12f;
+            [Tooltip("Integral gain applied to the accumulated error.")]
+            public float ki = 0.4f;
+            [Tooltip("Derivative gain applied to the error derivative.")]
+            public float kd = 4f;
+
+            private Vector3 _integral;
+            private Vector3 _lastError;
+            private bool _firstUpdate = true;
+
+            public void Reset()
+            {
+                _integral = Vector3.zero;
+                _lastError = Vector3.zero;
+                _firstUpdate = true;
+            }
+
+            public Vector3 Update(Vector3 error, float deltaTime)
+            {
+                _integral += error * deltaTime;
+                Vector3 derivative;
+
+                if (_firstUpdate)
+                {
+                    derivative = Vector3.zero;
+                    _firstUpdate = false;
+                }
+                else
+                {
+                    derivative = (error - _lastError) / Mathf.Max(deltaTime, Mathf.Epsilon);
+                }
+
+                _lastError = error;
+                return kp * error + ki * _integral + kd * derivative;
+            }
         }
+
+        [Header("Movement")]
+        [SerializeField] private float forwardAcceleration = 30f;
+        [SerializeField] private float strafeAcceleration = 25f;
+        [SerializeField] private float verticalAcceleration = 35f;
+        [SerializeField] private float boostDamp = 2f;
+        [SerializeField] private float maxSpeed = 45f;
+
+        [Header("Steering")]
+        [SerializeField] private float yawRate = 120f;
+        [SerializeField] private float pitchRate = 90f;
+        [SerializeField] private float rollRate = 110f;
+        [SerializeField] private PIDController orientationPid = new PIDController();
+
+        [Header("Camera")] 
+        [SerializeField] private Transform orientationVisual;
+
+        [Header("Debug")]
+        [SerializeField] private bool drawDebug = false;
+
+        private Rigidbody _body;
+        private Quaternion _targetRotation;
 
         private void Awake()
         {
             _body = GetComponent<Rigidbody>();
-            CacheInputProvider();
-            _gravityRegistry = GravityRegistry.Instance ?? FindObjectOfType<GravityRegistry>();
+            _body.useGravity = false;
+            _body.interpolation = RigidbodyInterpolation.Interpolate;
+            _targetRotation = _body.rotation;
         }
 
-        private void OnValidate()
+        private void OnEnable()
         {
-            if (_inputProvider != null && !(_inputProvider is IHoverInputSource))
-            {
-                Debug.LogWarning($"{_inputProvider.name} does not implement {nameof(IHoverInputSource)} and cannot drive the hover controller.", this);
-                _inputProvider = null;
-            }
+            orientationPid.Reset();
+        }
+
+        private void Update()
+        {
+            UpdateTargetRotation();
+            UpdateOrientationVisual();
         }
 
         private void FixedUpdate()
         {
-            if (_input == null)
+            ApplyOrientationControl();
+            ApplyTranslationalForces();
+            ApplyStabilization();
+        }
+
+        private void UpdateTargetRotation()
+        {
+            Vector3 gravityDirection = Physics.gravity.sqrMagnitude > Mathf.Epsilon
+                ? -Physics.gravity.normalized
+                : Vector3.up;
+
+            // Align the target rotation so its up axis matches gravity.
+            Quaternion gravityAlignment = Quaternion.FromToRotation(_targetRotation * Vector3.up, gravityDirection);
+            _targetRotation = gravityAlignment * _targetRotation;
+
+            float deltaTime = Time.deltaTime;
+            float yawInput = Input.GetAxis("Mouse X") * yawRate * deltaTime;
+            float pitchInput = -Input.GetAxis("Mouse Y") * pitchRate * deltaTime;
+            float rollInput = GetRollInput() * rollRate * deltaTime;
+
+            if (!Mathf.Approximately(yawInput, 0f))
             {
-                CacheInputProvider();
-                if (_input == null)
-                {
-                    return;
-                }
+                _targetRotation = Quaternion.AngleAxis(yawInput, gravityDirection) * _targetRotation;
             }
 
-            Vector3 expectedUp = _gravityRegistry != null ? _gravityRegistry.ExpectedUp : Vector3.up;
-            float deltaTime = Time.fixedDeltaTime;
-
-            Quaternion alignUp = Quaternion.FromToRotation(transform.up, expectedUp) * _body.rotation;
-            Quaternion desiredOrientation = _input.DesiredOrientation;
-            if (desiredOrientation == Quaternion.identity)
+            if (!Mathf.Approximately(pitchInput, 0f))
             {
-                desiredOrientation = Quaternion.LookRotation(transform.forward, expectedUp);
+                Vector3 pitchAxis = _targetRotation * Vector3.right;
+                _targetRotation = Quaternion.AngleAxis(pitchInput, pitchAxis) * _targetRotation;
             }
 
-            Quaternion targetRotation = Quaternion.Slerp(alignUp, desiredOrientation, 0.65f);
-            _body.MoveRotation(Quaternion.Slerp(_body.rotation, targetRotation, _orientationResponsiveness * deltaTime));
-
-            float throttle = Mathf.Clamp(_input.Throttle, -1f, 1f);
-            float steering = Mathf.Clamp(_input.Steering, -1f, 1f);
-
-            Vector3 forward = transform.forward;
-            _body.AddForce(forward * throttle * _thrustAcceleration, ForceMode.Acceleration);
-
-            if (_body.velocity.sqrMagnitude > _maxSpeed * _maxSpeed)
+            if (!Mathf.Approximately(rollInput, 0f))
             {
-                _body.velocity = Vector3.ClampMagnitude(_body.velocity, _maxSpeed);
-            }
-
-            _body.AddTorque(expectedUp * steering * _steeringTorque, ForceMode.Acceleration);
-
-            Vector3 lateralVelocity = Vector3.ProjectOnPlane(_body.velocity, expectedUp);
-            if (lateralVelocity.sqrMagnitude > Mathf.Epsilon)
-            {
-                Vector3 sideways = Vector3.Cross(expectedUp, forward).normalized;
-                float bank = Mathf.Clamp(Vector3.Dot(lateralVelocity.normalized, sideways), -1f, 1f);
-                _body.AddTorque(forward * -bank * _bankTorque, ForceMode.Acceleration);
+                Vector3 rollAxis = _targetRotation * Vector3.forward;
+                _targetRotation = Quaternion.AngleAxis(rollInput, rollAxis) * _targetRotation;
             }
         }
 
-        private void CacheInputProvider()
+        private float GetRollInput()
         {
-            if (_inputProvider != null)
+            float roll = 0f;
+            if (Input.GetKey(KeyCode.Q))
             {
-                _input = _inputProvider as IHoverInputSource;
+                roll -= 1f;
             }
+
+            if (Input.GetKey(KeyCode.E))
+            {
+                roll += 1f;
+            }
+
+            return roll;
+        }
+
+        private void ApplyOrientationControl()
+        {
+            Quaternion currentRotation = _body.rotation;
+            Quaternion deltaRotation = _targetRotation * Quaternion.Inverse(currentRotation);
+            deltaRotation.ToAngleAxis(out float angleDegrees, out Vector3 axis);
+
+            if (float.IsNaN(axis.x) || float.IsNaN(axis.y) || float.IsNaN(axis.z))
+            {
+                return;
+            }
+
+            if (angleDegrees > 180f)
+            {
+                angleDegrees -= 360f;
+            }
+
+            Vector3 error = axis * (angleDegrees * Mathf.Deg2Rad);
+            Vector3 torque = orientationPid.Update(error, Time.fixedDeltaTime);
+            _body.AddTorque(torque, ForceMode.Acceleration);
+        }
+
+        private void ApplyTranslationalForces()
+        {
+            float forwardInput = Input.GetAxis("Vertical");
+            float strafeInput = Input.GetAxis("Horizontal");
+            float verticalInput = GetVerticalInput();
+
+            Vector3 gravityDirection = Physics.gravity.sqrMagnitude > Mathf.Epsilon
+                ? -Physics.gravity.normalized
+                : Vector3.up;
+
+            Vector3 desiredAcceleration =
+                transform.forward * forwardInput * forwardAcceleration +
+                transform.right * strafeInput * strafeAcceleration +
+                gravityDirection * verticalInput * verticalAcceleration;
+
+            _body.AddForce(desiredAcceleration, ForceMode.Acceleration);
+
+            if (_body.velocity.sqrMagnitude > maxSpeed * maxSpeed)
+            {
+                _body.velocity = Vector3.ClampMagnitude(_body.velocity, maxSpeed);
+            }
+        }
+
+        private float GetVerticalInput()
+        {
+            float vertical = 0f;
+            if (Input.GetKey(KeyCode.Space))
+            {
+                vertical += 1f;
+            }
+
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+            {
+                vertical -= 1f;
+            }
+
+            return Mathf.Clamp(vertical, -1f, 1f);
+        }
+
+        private void ApplyStabilization()
+        {
+            Vector3 gravityDirection = Physics.gravity.sqrMagnitude > Mathf.Epsilon
+                ? -Physics.gravity.normalized
+                : Vector3.up;
+
+            Vector3 projectedVelocity = Vector3.ProjectOnPlane(_body.velocity, gravityDirection);
+            Vector3 dampingForce = -projectedVelocity * boostDamp;
+            _body.AddForce(dampingForce, ForceMode.Acceleration);
+        }
+
+        private void UpdateOrientationVisual()
+        {
+            if (orientationVisual == null)
+            {
+                return;
+            }
+
+            orientationVisual.rotation = Quaternion.Slerp(orientationVisual.rotation, _targetRotation, 8f * Time.deltaTime);
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            if (!drawDebug || _body == null)
+            {
+                return;
+            }
+
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawLine(transform.position, transform.position + _body.velocity);
+
+            Vector3 gravityDirection = Physics.gravity.sqrMagnitude > Mathf.Epsilon
+                ? -Physics.gravity.normalized
+                : Vector3.up;
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawLine(transform.position, transform.position + gravityDirection * 5f);
         }
     }
 }
