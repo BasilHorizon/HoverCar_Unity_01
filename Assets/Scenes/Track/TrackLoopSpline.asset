@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c9f1d3fa7a174b91a3f3675d1ce9d0e, type: 3}
+  m_Name: TrackLoopSpline
+  m_EditorClassIdentifier: 
+  closed: 1
+  knots:
+  - position: {x: 0, y: 0, z: 0}
+    tangentIn: {x: -4, y: 0, z: 0}
+    tangentOut: {x: 4, y: 0, z: 0}
+    rotation: {x: 0, y: 0, z: 0, w: 1}
+  - position: {x: 12, y: 0, z: 0}
+    tangentIn: {x: -4, y: 0, z: 0}
+    tangentOut: {x: 3, y: 0, z: 3}
+    rotation: {x: 0, y: 0, z: 0, w: 1}
+  - position: {x: 18, y: 0, z: 6}
+    tangentIn: {x: -3, y: 0, z: -3}
+    tangentOut: {x: -3, y: 0, z: 3}
+    rotation: {x: 0, y: 0, z: 0, w: 1}
+  - position: {x: 12, y: 0, z: 12}
+    tangentIn: {x: 3, y: 0, z: -3}
+    tangentOut: {x: -4, y: 0, z: 0}
+    rotation: {x: 0, y: 0, z: 0, w: 1}
+  - position: {x: 0, y: 0, z: 12}
+    tangentIn: {x: 4, y: 0, z: 0}
+    tangentOut: {x: -3, y: 0, z: -3}
+    rotation: {x: 0, y: 0, z: 0, w: 1}
+  - position: {x: -6, y: 0, z: 6}
+    tangentIn: {x: 3, y: 0, z: 3}
+    tangentOut: {x: 3, y: 0, z: -3}
+    rotation: {x: 0, y: 0, z: 0, w: 1}
