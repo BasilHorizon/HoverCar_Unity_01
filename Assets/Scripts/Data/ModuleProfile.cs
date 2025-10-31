@@ -1,48 +1,45 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace HoverCar.StationAssembly
+namespace HoverCar.Data
 {
-    [CreateAssetMenu(menuName = "Stations/Module Profile", fileName = "ModuleProfile")]
+    [CreateAssetMenu(fileName = "ModuleProfile", menuName = "HoverCar/Data/Module Profile")]
     public class ModuleProfile : ScriptableObject
     {
-        [Tooltip("Prefab that represents this module in the world.")]
-        public GameObject modulePrefab;
-
-        [Serializable]
-        public class SocketDefinition
+        [System.Serializable]
+        public class ModuleSocket
         {
-            public string name = "Socket";
-            public Vector3 position = Vector3.zero;
-            public Vector3 forward = Vector3.forward;
-            public Vector3 up = Vector3.up;
-            [Tooltip("Optional spline identifier used to blend spline segments when connecting modules.")]
-            public string splineId;
+            [Tooltip("Identifier used when pairing sockets together.")]
+            public string id = "Default";
+
+            [Tooltip("Local position of the socket relative to the module origin.")]
+            public Vector3 localPosition = Vector3.zero;
+
+            [Tooltip("Local rotation (Euler angles) applied to the socket relative to the module origin.")]
+            public Vector3 localEulerAngles = Vector3.zero;
+
+            [Tooltip("Local scaling applied to attached modules when connected through this socket.")]
+            public Vector3 localScale = Vector3.one;
+
+            [Tooltip("Optional list of modules that can be connected to this socket.")]
+            public List<ModuleProfile> compatibleModules = new();
         }
 
-        [Serializable]
-        public class SplineDefinition
-        {
-            public string id = Guid.NewGuid().ToString();
-            [Tooltip("Control points in local space relative to the module root.")]
-            public List<Vector3> controlPoints = new();
-        }
+        [Header("Metadata")]
+        [SerializeField]
+        private string displayName = "New Module";
 
-        [Tooltip("Sockets that can be connected to other modules.")]
-        public List<SocketDefinition> sockets = new();
+        [Header("Connectivity")]
+        [SerializeField]
+        private List<ModuleSocket> sockets = new();
 
-        [Tooltip("Spline segments that can be blended when sockets are connected.")]
-        public List<SplineDefinition> splines = new();
+        [Header("Spline Data")]
+        [Tooltip("Reference to a spline asset that defines the local traversal path for this module.")]
+        [SerializeField]
+        private Object localSpline;
 
-        public SocketDefinition GetSocket(string socketName)
-        {
-            return sockets.Find(s => string.Equals(s.name, socketName, StringComparison.Ordinal));
-        }
-
-        public SplineDefinition GetSpline(string id)
-        {
-            return splines.Find(s => string.Equals(s.id, id, StringComparison.Ordinal));
-        }
+        public string DisplayName => displayName;
+        public IReadOnlyList<ModuleSocket> Sockets => sockets;
+        public Object LocalSpline => localSpline;
     }
 }

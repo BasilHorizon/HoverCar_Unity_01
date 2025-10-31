@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f5e5a18d5a049d18c1c9edb4f8935f5, type: 3}
+  m_Name: ExampleVehicleConfig
+  m_EditorClassIdentifier: 
+  displayName: Starter Hover Car
+  gravitySource: {fileID: 11400000, guid: 4c3e4d9f5e1444cbbf4a1d0a0265a0b4, type: 2}
+  modules:
+  - slotId: Chassis
+    moduleProfile: {fileID: 11400000, guid: 47a706d667ec446c9e96d312ba37f115, type: 2}
+  - slotId: Engine
+    moduleProfile: {fileID: 0}
+  baseMass: 950
+  maxSpeed: 52
+  acceleration: 14
+  handling: 0.85
+  energyCapacity: 120
